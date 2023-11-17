@@ -40,17 +40,19 @@
 // FastAccelStepper represents speed in milliHz (mHz); that is, microsteps/sec x 1000.
 // This gives good resolution without using floating point.
 // All the calculations below happen at compile time.
-static const int RMSSetting = 400;         // Nema 11 670ma rated
-//static const int RMSSetting = 800;         // Nema 17 1500ma rated
 static const unsigned siderealMins = 1436;
 static const double platformRatio = 4605.0;   // total mech advantage, motor axis to platform axis
+static const double calibrationFactor = 0.97;  // empirically derived from field testing
+static const double baselineRPM = (platformRatio * calibrationFactor) / siderealMins;
 static const unsigned steps = 200;
 static const unsigned microsteps = 16;
-static const double baselineRPM = platformRatio / siderealMins;
 static const uint32_t baseline_mHz = (baselineRPM * steps * microsteps * 1000) / 60;
 static const int trackingTimeMins = 60;
-//static const int trackingTimeMins = 1;
-unsigned long microstepLimit = (trackingTimeMins * baseline_mHz * 60) / 1000;
+//static const int trackingTimeMins = 1;     // for testing
+static unsigned long microstepLimit = (trackingTimeMins * baseline_mHz * 60) / 1000;
+
+static const int RMSSetting = 400;         // Nema 11 670ma rated
+//static const int RMSSetting = 800;         // Nema 17 1500ma rated
 
 // Serial communication with TMC2209 driver via UART
 // Nano has only 1 HW UART, used for PC communication, so we need SW UART
@@ -72,20 +74,21 @@ TMC2209Stepper driver(&driver_uart, RSENSE, CSADDR);
 FastAccelStepperEngine engine = FastAccelStepperEngine();
 FastAccelStepper *stepper = NULL;
 
-// Speed adjustment - represented as a linear scale factor where 1000 represents 1.0.
+// Controllable Speed adjustment - represented as a linear scale factor 
+// where 1000 represents 1.0.
 // Current speed = baseline speed * (adjustment/1000)
 static const unsigned int initSpeedFactor = 1000;
 unsigned int currentSpeedFactor = initSpeedFactor;
-bool warpMode = false;
+bool warpMode = false;     // 10x
 bool pauseMode = true;
 
-// Sense pin - senses whether hand controller connected or not
+// Sense pin - senses whether hand controller is connected or not
 #define sensePin 14
 
 // PSC - Persistent Speed Control - lasting speed adjustment using rotary encoder.
 // This allows sidereal tracking rate to be fine-tuned according to temperature or
-// other factors. Also the lunar tracking rate is approximately 3% slower than the 
-// astral rate.
+// other factors. Also allows adjustment for lunar tracking, which is approximately 
+// 3% slower than the astral rate.
 #define encoderClkPin 2
 #define encoderDTPin 3
 
@@ -99,7 +102,7 @@ Button PSCButton(PSCButtonPin);
 // Allows tracking to me momentarily sped up or slowed down in order
 // to center objects in the eyepiece.
 // The pot is not very granular, so we just quantize it as a value from 
-// [-2..+2], and adjust the speed as a power of 2 (1/4x to 4x).
+// [-2. +2], and adjust the speed as a power of 2 (from 1/4x to 4x).
 #define MSCPotPin 3
 QPot MSCPot(MSCPotPin, sensePin);
 
@@ -268,10 +271,12 @@ void updateStepper() {
   // Compute adjusted target speed. FastAccelStepper represents speed as
   // "milliHz", that is Hz * 1000.
   uint32_t new_mHz = ((uint64_t)baseline_mHz * currentSpeedFactor) / 1000;
+
   // Retrieve current speed setting (may not be actual speed if accelerating)
   uint32_t current_mHz = stepper->getSpeedInMilliHz();
   static bool limitReported = false;
 
+  // If we reached the tracking limit, stop
   if (stepper->getCurrentPosition() == microstepLimit) {
     if (!limitReported) {
       Serial.println(F("Limit reached, stopping"));
@@ -279,8 +284,7 @@ void updateStepper() {
     }
     limitReported = true;
   }
-  // If we are supposed to be stopped (pause mode, ajdustment==0, or at the end
-  // position), stop the drive. 
+  // Pause via user control
   else if (pauseMode || new_mHz == 0) {
     if (stepper->isRunning()) {
       stepper->stopMove();
