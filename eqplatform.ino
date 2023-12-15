@@ -47,9 +47,8 @@ static const double baselineRPM = (platformRatio * calibrationFactor) / sidereal
 static const unsigned steps = 200;
 static const unsigned microsteps = 16;
 static const uint32_t baseline_mHz = (baselineRPM * steps * microsteps * 1000) / 60;
-static const int trackingTimeMins = 90;
-//static const int trackingTimeMins = 1;     // for testing
-static unsigned long microstepLimit = (trackingTimeMins * baseline_mHz * 60) / 1000;
+static const int trackingExtentDeg = 20;
+static unsigned long microstepLimit = ((double)steps * microsteps * platformRatio * trackingExtentDeg) / 360;
 
 static const int RMSSetting = 400;         // Nema 11 670ma rated
 //static const int RMSSetting = 800;         // Nema 17 1500ma rated
