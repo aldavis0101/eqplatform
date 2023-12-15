@@ -41,8 +41,8 @@
 // This gives good resolution without using floating point.
 // All the calculations below happen at compile time.
 static const unsigned siderealMins = 1436;
-static const double platformRatio = 4461.0;   // total mech advantage, motor axis to platform axis
-static const double calibrationFactor = 1.00;  // empirically derived from field testing
+static const double platformRatio = 4461.0;    // total mech advantage, motor axis to platform axis
+static const double calibrationFactor = 0.98;  // empirically derived from field testing
 static const double baselineRPM = (platformRatio * calibrationFactor) / siderealMins;
 static const unsigned steps = 200;
 static const unsigned microsteps = 16;
